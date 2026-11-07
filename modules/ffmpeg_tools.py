@@ -1,6 +1,7 @@
 import json
-import subprocess
 import os
+import shutil
+import subprocess
 
 from config import (
     VIDEO_FILE,
@@ -8,102 +9,194 @@ from config import (
     OUTPUT_VIDEO
 )
 
-TEMP_FOLDER = "output/temp_segments"
+TEMP_DIR = "output/temp_segments"
 
 
-def create_temp_folder():
+def run_command(command):
 
-    if not os.path.exists(TEMP_FOLDER):
-        os.makedirs(TEMP_FOLDER)
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+
+        print(result.stderr)
+
+        raise RuntimeError(
+            "FFmpeg devolvió un error"
+        )
+
+    return result
 
 
-def extract_segments():
+def create_temp_dir():
 
-    create_temp_folder()
+    if os.path.exists(TEMP_DIR):
+
+        shutil.rmtree(
+            TEMP_DIR
+        )
+
+    os.makedirs(
+        TEMP_DIR,
+        exist_ok=True
+    )
+
+
+def validate_segments():
+
+    if not os.path.exists(
+        SEGMENTS_FILE
+    ):
+        raise FileNotFoundError(
+            SEGMENTS_FILE
+        )
 
     with open(
         SEGMENTS_FILE,
         "r",
         encoding="utf-8"
-    ) as f:
+    ) as file:
 
-        segments = json.load(f)
+        segments = json.load(
+            file
+        )
+
+    if len(segments) == 0:
+
+        raise ValueError(
+            "No hay segmentos para exportar"
+        )
+
+    return segments
+
+
+def extract_segment(
+    segment,
+    output_path
+):
+
+    start = segment["start"]
+
+    end = segment["end"]
+
+    duration = (
+        end - start
+    )
+
+    command = [
+
+        "ffmpeg",
+
+        "-y",
+
+        "-ss",
+        str(start),
+
+        "-i",
+        VIDEO_FILE,
+
+        "-t",
+        str(duration),
+
+        "-c:v",
+        "libx264",
+
+        "-preset",
+        "fast",
+
+        "-crf",
+        "23",
+
+        "-c:a",
+        "aac",
+
+        "-b:a",
+        "192k",
+
+        output_path
+    ]
+
+    run_command(
+        command
+    )
+
+
+def extract_all_segments(
+    segments
+):
 
     files = []
 
-    for idx, segment in enumerate(segments):
+    print()
+    print(
+        "[INFO] Extrayendo segmentos..."
+    )
+    print()
 
-        start = segment["start"]
-        end = segment["end"]
+    for index, segment in enumerate(
+        segments
+    ):
 
-        duration = end - start
-
-        output_file = (
-            f"{TEMP_FOLDER}/part_{idx}.mp4"
+        output_file = os.path.join(
+            TEMP_DIR,
+            f"segment_{index}.mp4"
         )
-
-        command = [
-
-            "ffmpeg",
-            "-y",
-
-            "-ss",
-            str(start),
-
-            "-i",
-            VIDEO_FILE,
-
-            "-t",
-            str(duration),
-
-            "-c:v",
-            "libx264",
-
-            "-c:a",
-            "aac",
-
-            output_file
-
-        ]
 
         print(
-            f"[INFO] Extrayendo segmento {idx+1}"
+            f"[{index+1}/{len(segments)}] "
+            f"{segment['start']} -> {segment['end']}"
         )
 
-        subprocess.run(
-            command,
-            check=True
+        extract_segment(
+            segment,
+            output_file
         )
 
-        files.append(output_file)
+        files.append(
+            output_file
+        )
 
     return files
 
 
-def create_concat_file(files):
+def build_concat_file(
+    files
+):
 
-    concat_path = (
-        f"{TEMP_FOLDER}/concat.txt"
+    concat_file = os.path.join(
+        TEMP_DIR,
+        "concat.txt"
     )
 
     with open(
-        concat_path,
+        concat_file,
         "w",
         encoding="utf-8"
-    ) as f:
+    ) as file:
 
-        for file in files:
+        for path in files:
 
-            f.write(
-                f"file '{os.path.abspath(file)}'\n"
+            absolute = os.path.abspath(
+                path
             )
 
-    return concat_path
+            file.write(
+                f"file '{absolute}'\n"
+            )
+
+    return concat_file
 
 
-def merge_segments(files):
+def merge_segments(
+    files
+):
 
-    concat_file = create_concat_file(files)
+    concat_file = build_concat_file(
+        files
+    )
 
     command = [
 
@@ -124,25 +217,45 @@ def merge_segments(files):
         "copy",
 
         OUTPUT_VIDEO
-
     ]
 
+    print()
     print(
         "[INFO] Uniendo segmentos..."
     )
 
-    subprocess.run(
-        command,
-        check=True
-    )
-
-    print(
-        f"[OK] Vídeo exportado: {OUTPUT_VIDEO}"
+    run_command(
+        command
     )
 
 
 def render_final_video():
 
-    files = extract_segments()
+    print()
+    print("=" * 50)
+    print("EXPORTACION FINAL")
+    print("=" * 50)
 
-    merge_segments(files)
+    segments = validate_segments()
+
+    create_temp_dir()
+
+    files = extract_all_segments(
+        segments
+    )
+
+    merge_segments(
+        files
+    )
+
+    print()
+
+    print(
+        "[OK] Video generado:"
+    )
+
+    print(
+        OUTPUT_VIDEO
+    )
+
+    print()

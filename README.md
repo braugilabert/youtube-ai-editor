@@ -1,8 +1,14 @@
 # 🎬 YouTube AI Editor
 
-Editor de vídeo autónomo local basado en IA.
+Editor autónomo de vídeo para YouTube basado en IA local.
 
-El objetivo de este proyecto es transformar automáticamente vídeos largos (gameplays, podcasts, directos o grabaciones) en una versión mucho más corta y apta para YouTube utilizando únicamente herramientas gratuitas y ejecutadas en local.
+Este proyecto transforma automáticamente vídeos largos (gameplays, podcasts, directos o grabaciones) en una versión mucho más corta y apta para YouTube utilizando únicamente herramientas gratuitas ejecutadas en local.
+
+No utiliza APIs de pago.
+
+No envía información a servicios externos.
+
+Todo se ejecuta en tu propio ordenador.
 
 ---
 
@@ -14,7 +20,7 @@ Convertir automáticamente:
 Vídeo de 3 horas
 ```
 
-en:
+en algo parecido a:
 
 ```text
 Vídeo de 30-60 minutos
@@ -24,18 +30,17 @@ eliminando:
 
 - silencios
 - tiempos muertos
-- repeticiones
 - errores
-- pausas innecesarias
+- pausas largas
+- repeticiones
 
-manteniendo:
+y conservando:
 
 - progreso importante
 - momentos divertidos
-- explicaciones útiles
-- eventos relevantes
-
-Todo ello sin APIs de pago.
+- explicaciones relevantes
+- descubrimientos
+- eventos clave
 
 ---
 
@@ -45,47 +50,99 @@ Todo ello sin APIs de pago.
 
 Ejecuta el modelo local.
 
-Modelo recomendado:
+Modelo principal:
 
-```text
+```bash
 gemma3:12b-it-qat
+```
+
+Opcional:
+
+```bash
+llama3.1:8b
 ```
 
 ---
 
 ## Faster Whisper
 
-Responsable de convertir el audio del vídeo en texto.
+Convierte automáticamente el audio del vídeo en texto.
 
 ```text
-Vídeo → Transcripción
+Video
+↓
+Audio
+↓
+Transcripción
 ```
 
 ---
 
 ## Gemma 3
 
-Actúa como editor.
+Actúa como editor virtual.
 
-Analiza cada parte de la transcripción y decide:
+Analiza bloques de aproximadamente 2 minutos y decide:
 
-```text
-Conservar
-o
-Eliminar
+- conservar
+- eliminar
+- puntuar interés
+
+Ejemplo:
+
+```json
+{
+  "score": 8,
+  "keep": true,
+  "reason": "evento importante"
+}
 ```
 
 ---
 
 ## FFmpeg
 
-Realiza los cortes reales sobre el vídeo.
+Realiza los cortes reales del vídeo.
 
 ```text
-Segmentos elegidos
+Segmentos seleccionados
 ↓
-Vídeo final
+Corte
+↓
+Montaje
+↓
+Exportación
 ```
+
+---
+
+# ✅ Características actuales
+
+La versión actual incorpora:
+
+✅ Transcripción automática con Faster Whisper
+
+✅ Compatibilidad CPU y GPU
+
+✅ División automática en bloques
+
+✅ Análisis mediante Gemma 3
+
+✅ Recuperación de JSON roto
+
+✅ Gestión de errores
+
+✅ Fusión automática de segmentos consecutivos
+
+✅ Limpieza automática de archivos temporales
+
+✅ Renderizado automático del vídeo final
+
+✅ Métricas de duración
+
+✅ Métricas de tiempo de proceso
+
+✅ Funcionamiento completamente local
 
 ---
 
@@ -122,21 +179,23 @@ youtube-ai-editor/
 
 # ⚙️ Instalación
 
-## 1. Instalar Python
+## 1. Python
 
 Versión recomendada:
 
 ```text
-Python 3.10 o superior
+Python 3.10+
 ```
 
 ---
 
-## 2. Instalar Ollama
+## 2. Ollama
 
-Descargar desde:
+Descargar:
 
+```text
 https://ollama.com
+```
 
 ---
 
@@ -164,29 +223,27 @@ ffmpeg -version
 
 ---
 
-## 5. Instalar dependencias
-
-Crear entorno virtual:
-
-```bash
-python -m venv .venv
-```
-
-Activar:
+## 5. Crear entorno virtual
 
 Windows:
 
 ```bash
+python -m venv .venv
+
 .venv\Scripts\activate
 ```
 
 Linux:
 
 ```bash
+python -m venv .venv
+
 source .venv/bin/activate
 ```
 
-Instalar dependencias:
+---
+
+## 6. Instalar dependencias
 
 ```bash
 pip install -r requirements.txt
@@ -196,13 +253,13 @@ pip install -r requirements.txt
 
 # 📄 Configuración
 
-Editar:
+Archivo:
 
 ```python
 config.py
 ```
 
-Opciones principales:
+Configuración actual:
 
 ```python
 VIDEO_FILE = "input/video.mp4"
@@ -211,24 +268,40 @@ WHISPER_MODEL = "large-v3"
 
 OLLAMA_MODEL = "gemma3:12b-it-qat"
 
-CHUNK_SECONDS = 300
+OLLAMA_URL = "http://localhost:11434/api/generate"
+
+CHUNK_SECONDS = 120
 
 MIN_SCORE = 7
 
 TARGET_DURATION_MINUTES = 50
+
+MIN_SILENCE_DURATION = 2
+
+MIN_SILENCE_DB = -35
+
+TRANSCRIPT_FILE = "transcripts/transcript.json"
+
+CHUNKS_FILE = "analysis/chunks.json"
+
+DECISIONS_FILE = "analysis/decisions.json"
+
+SEGMENTS_FILE = "analysis/segments.json"
+
+OUTPUT_VIDEO = "output/final_video.mp4"
 ```
 
 ---
 
 # ▶️ Uso
 
-Colocar el vídeo a editar:
+Colocar el vídeo dentro de:
 
 ```text
 input/video.mp4
 ```
 
-Ejecutar:
+Después:
 
 ```bash
 python run.py
@@ -236,38 +309,32 @@ python run.py
 
 ---
 
-# 🔄 Flujo Interno
+# 🔄 Flujo Completo
 
 ## Paso 1
 
-Whisper genera:
+Whisper transcribe el vídeo.
+
+Resultado:
 
 ```text
 transcripts/transcript.json
-```
-
-Ejemplo:
-
-```json
-{
-  "start": 0,
-  "end": 4,
-  "text": "Hola chicos bienvenidos."
-}
 ```
 
 ---
 
 ## Paso 2
 
-La transcripción se divide en bloques:
+La transcripción se divide en bloques de aproximadamente:
 
 ```text
-0-5 min
+2 minutos
+```
 
-5-10 min
+Resultado:
 
-10-15 min
+```text
+analysis/chunks.json
 ```
 
 ---
@@ -276,21 +343,17 @@ La transcripción se divide en bloques:
 
 Gemma analiza cada bloque.
 
-Respuesta típica:
+Ejemplo:
 
 ```json
 {
-  "score": 8,
+  "score": 9,
   "keep": true,
-  "reason": "evento importante"
+  "reason": "descubrimiento importante"
 }
 ```
 
----
-
-## Paso 4
-
-Se guardan las decisiones:
+Resultado:
 
 ```text
 analysis/decisions.json
@@ -298,9 +361,11 @@ analysis/decisions.json
 
 ---
 
-## Paso 5
+## Paso 4
 
-Se generan los segmentos:
+Se conservan únicamente los bloques aprobados.
+
+Resultado:
 
 ```text
 analysis/segments.json
@@ -312,11 +377,43 @@ Ejemplo:
 [
   {
     "start": 0,
-    "end": 300
+    "end": 120
   },
   {
-    "start": 1200,
-    "end": 1500
+    "start": 340,
+    "end": 600
+  }
+]
+```
+
+---
+
+## Paso 5
+
+Los segmentos cercanos se fusionan automáticamente.
+
+Antes:
+
+```json
+[
+  {
+    "start": 0,
+    "end": 120
+  },
+  {
+    "start": 121,
+    "end": 240
+  }
+]
+```
+
+Después:
+
+```json
+[
+  {
+    "start": 0,
+    "end": 240
   }
 ]
 ```
@@ -325,7 +422,11 @@ Ejemplo:
 
 ## Paso 6
 
-FFmpeg corta y une los vídeos.
+FFmpeg:
+
+- corta
+- une
+- exporta
 
 Resultado:
 
@@ -339,19 +440,19 @@ output/final_video.mp4
 
 ## transcript.json
 
-Contiene toda la transcripción.
+Contiene la transcripción completa.
 
 ---
 
 ## chunks.json
 
-Contiene la división en bloques.
+Contiene la división de la transcripción.
 
 ---
 
 ## decisions.json
 
-Contiene todas las decisiones de Gemma.
+Contiene las decisiones tomadas por Gemma.
 
 Ejemplo:
 
@@ -367,67 +468,97 @@ Ejemplo:
 
 ## segments.json
 
-Contiene únicamente los bloques aprobados.
+Contiene únicamente los fragmentos aprobados.
 
 ---
 
 ## final_video.mp4
 
-Versión final editada.
+Vídeo final exportado.
 
 ---
 
-# ⚠️ Limitaciones Actuales
+# 📊 Rendimiento esperado
 
-La V1 es funcional, pero tiene limitaciones:
+Equipo de referencia:
 
-- Analiza bloques completos de 5 minutos.
-- No entiende imágenes.
-- No entiende lo que sucede visualmente en el juego.
-- No detecta eventos épicos automáticamente.
-- No reconoce expresiones faciales.
-- No genera subtítulos.
+```text
+RTX 3060 / 4060
+32 GB RAM
+```
+
+Vídeo de:
+
+```text
+3 horas
+```
+
+Tiempo aproximado:
+
+### Whisper
+
+```text
+10-40 min
+```
+
+### Gemma
+
+```text
+10-30 min
+```
+
+### Exportación
+
+```text
+10-30 min
+```
+
+### Tiempo total
+
+```text
+30-100 min
+```
+
+Dependiendo del hardware.
+
+---
+
+# ⚠️ Limitaciones actuales
+
+La IA trabaja únicamente con texto.
+
+Actualmente NO analiza:
+
+- imagen
+- escenas
+- inventario
+- expresiones faciales
+- HUD
+- mapas
+- combates silenciosos
+- eventos visuales
+
+Por lo tanto puede perder momentos importantes si no se hablan durante el vídeo.
 
 ---
 
 # 🚧 Roadmap V2
 
-## Eliminación automática de silencios
+Próximas mejoras previstas:
 
-Integrar:
+✅ Detección automática de silencios
 
-```bash
-ffmpeg -af silencedetect
-```
+✅ Eliminación automática de pausas largas
 
----
+✅ Segmentos internos más precisos
 
-## Edición más precisa
+✅ Detección de repeticiones
 
-Permitir que Gemma devuelva:
+✅ Mejor reducción de duración
 
-```json
-{
-  "start": 121,
-  "end": 166
-}
-```
+✅ Exportación optimizada
 
-en lugar de bloques completos.
-
----
-
-## Objetivo
-
-Pasar de:
-
-```text
-3 horas
-↓
-1 hora
-```
-
-a:
+Objetivo:
 
 ```text
 3 horas
@@ -439,14 +570,13 @@ a:
 
 # 🚧 Roadmap V3
 
-Generación automática de:
+Automatización para YouTube:
 
-- título
-- descripción
+- título automático
+- descripción automática
 - hashtags
 - capítulos
-
-para YouTube.
+- metadatos SEO
 
 ---
 
@@ -460,12 +590,48 @@ Integración futura con:
 
 ---
 
-# 🎯 Objetivo Final
+# 🎯 Estado actual
 
-Construir un editor de vídeo completamente autónomo capaz de:
+Versión actual:
 
 ```text
-Vídeo bruto
+Video
+↓
+Whisper
+↓
+Gemma
+↓
+FFmpeg
+↓
+Video final
+```
+
+Versión futura:
+
+```text
+Video
+↓
+Whisper
+↓
+Detección silencios
+↓
+Gemma
+↓
+Refinado avanzado
+↓
+FFmpeg
+↓
+Video optimizado
+```
+
+---
+
+# 🎯 Visión Final
+
+Construir un editor autónomo capaz de:
+
+```text
+Video bruto
 ↓
 Transcripción
 ↓
@@ -473,11 +639,15 @@ Análisis IA
 ↓
 Selección automática
 ↓
-Edición
+Montaje
 ↓
 Exportación
 ↓
-Título y descripción
+Título
+↓
+Descripción
+↓
+Capítulos
 ↓
 Listo para YouTube
 ```
@@ -486,4 +656,4 @@ Todo local.
 
 Todo gratuito.
 
-Todo basado en modelos abiertos.
+Todo basado en software libre y modelos abiertos.

@@ -1,66 +1,98 @@
-import requests
 import json
+import re
+import requests
 
 from config import (
-    OLLAMA_URL,
-    OLLAMA_MODEL
+    OLLAMA_MODEL,
+    OLLAMA_URL
 )
 
 
 SYSTEM_PROMPT = """
-Eres un editor profesional de YouTube.
+Eres un editor profesional de YouTube especializado
+en gameplays y videos hablados.
 
-Debes decidir si un fragmento de gameplay
-merece conservarse en el montaje final.
+Tu tarea consiste en determinar si el fragmento
+de transcripción merece mantenerse en la edición final.
 
-Puntúa de 0 a 10.
+Puntúa cada bloque de 0 a 10.
 
-Conserva:
+CRITERIOS PARA CONSERVAR:
 
 - progreso importante
-- eventos relevantes
-- explicaciones útiles
-- momentos divertidos
+- eventos clave
 - descubrimientos
 - combates importantes
+- explicaciones útiles
+- momentos divertidos
+- momentos con emoción
 
-Elimina:
+CRITERIOS PARA ELIMINAR:
 
 - silencios
-- repeticiones
+- tiempos muertos
+- repetir información
 - caminar sin objetivo
-- gestión aburrida de inventario
-- esperas
+- gestión rutinaria de inventario
+- esperas innecesarias
 - errores
 
-Debes responder SOLO JSON.
+RESPONDE EXCLUSIVAMENTE JSON.
 
-Formato:
+Formato obligatorio:
 
 {
     "score": 0,
     "keep": true,
     "reason": ""
 }
+
+No escribas texto adicional.
 """
 
 
-def analyze_chunk(chunk):
+def extract_json(text):
 
-    text = "\n".join(
-        seg["text"]
-        for seg in chunk["segments"]
+    match = re.search(
+        r"\{.*\}",
+        text,
+        flags=re.DOTALL
     )
 
-    prompt = f"""
+    if not match:
+        raise ValueError(
+            "No se encontró JSON válido"
+        )
+
+    return json.loads(
+        match.group()
+    )
+
+
+def build_prompt(chunk):
+
+    transcript_text = "\n".join(
+        segment["text"]
+        for segment in chunk["segments"]
+    )
+
+    return f"""
 {SYSTEM_PROMPT}
 
-INICIO DEL BLOQUE
+BLOQUE A ANALIZAR
 
-{text}
+Duración aproximada:
+{chunk["duration"]} segundos
+
+Contenido:
+
+{transcript_text}
 
 FIN DEL BLOQUE
 """
+
+
+def call_ollama(prompt):
 
     payload = {
         "model": OLLAMA_MODEL,
@@ -69,35 +101,87 @@ FIN DEL BLOQUE
         "format": "json"
     }
 
+    response = requests.post(
+        OLLAMA_URL,
+        json=payload,
+        timeout=600
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+def analyze_chunk(chunk):
+
     try:
 
-        response = requests.post(
-            OLLAMA_URL,
-            json=payload,
-            timeout=300
+        prompt = build_prompt(
+            chunk
         )
 
-        response.raise_for_status()
+        response = call_ollama(
+            prompt
+        )
 
-        result = response.json()
+        raw_answer = response.get(
+            "response",
+            "{}"
+        )
 
-        answer = result["response"]
+        parsed = extract_json(
+            raw_answer
+        )
 
-        data = json.loads(answer)
+        score = int(
+            parsed.get(
+                "score",
+                0
+            )
+        )
+
+        score = max(
+            0,
+            min(
+                score,
+                10
+            )
+        )
+
+        keep = bool(
+            parsed.get(
+                "keep",
+                False
+            )
+        )
+
+        reason = str(
+            parsed.get(
+                "reason",
+                ""
+            )
+        )
 
         return {
             "start": chunk["start"],
             "end": chunk["end"],
-            "score": data.get("score", 0),
-            "keep": data.get("keep", False),
-            "reason": data.get("reason", "")
+            "score": score,
+            "keep": keep,
+            "reason": reason
         }
 
     except Exception as error:
 
+        print()
         print(
-            f"[ERROR] Gemma falló: {error}"
+            "[ERROR] Fallo analizando bloque"
         )
+
+        print(
+            str(error)
+        )
+
+        print()
 
         return {
             "start": chunk["start"],
